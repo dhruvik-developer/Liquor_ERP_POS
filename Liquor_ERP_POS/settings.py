@@ -170,3 +170,10 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'usermgmt.renderers.CustomJSONRenderer',
+    ],
+}
+
