@@ -2,8 +2,9 @@ from django.contrib.auth.hashers import check_password
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
-from .auth import encode_jwt
 from .drf_auth import JWTAuthentication
 from .models import Permission, Role, Store, User
 from .serializers import (
@@ -73,11 +74,16 @@ class LoginViewSet(generics.GenericAPIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        token = encode_jwt({"user_id": user.id, "email": user.email}, expires_in_minutes=60)
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
         response_data = {
             "name": user.name,
             "email": user.email,
-            "tokens": {"access_token": token, "token_type": "Bearer"},
+            "tokens": {
+                "access_token": access_token,
+                "refresh_token": str(refresh),
+                "token_type": "Bearer",
+            },
             "user": UserSerializer(user).data,
         }
         return Response(
@@ -86,8 +92,52 @@ class LoginViewSet(generics.GenericAPIView):
         )
 
 
+class TokenRefreshViewSet(generics.GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh_token") or request.data.get("refresh")
+        if not refresh_token:
+            return Response(
+                {"status": False, "message": "refresh_token is required", "data": {}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+        except TokenError:
+            return Response(
+                {"status": False, "message": "Invalid or expired refresh token", "data": {}},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        return Response(
+            {
+                "status": True,
+                "message": "Token refreshed successfully",
+                "data": {
+                    "tokens": {
+                        "access_token": access_token,
+                        "refresh_token": refresh_token,
+                        "token_type": "Bearer",
+                    }
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class LogoutViewSet(BaseERPAPIView):
     def post(self, request):
+        refresh_token = request.data.get("refresh_token") or request.data.get("refresh")
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                return self.deny("Invalid refresh token", status.HTTP_400_BAD_REQUEST)
+
         payload = getattr(request, "jwt_payload", {}) or {}
         jti = payload.get("jti")
         exp = payload.get("exp")

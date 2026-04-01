@@ -56,7 +56,7 @@ class AuthFlowTests(TestCase):
 
     def test_login_and_access_check(self):
         response = self.client.post(
-            "/api/auth/login",
+            "/api/auth/login/",
             data=json.dumps({"email": "admin@example.com", "password": "Admin@12345"}),
             content_type="application/json",
         )
@@ -64,7 +64,7 @@ class AuthFlowTests(TestCase):
         token = response.json()["data"]["tokens"]["access_token"]
 
         access_check = self.client.get(
-            "/api/auth/access-check?permission_code=users_view",
+            "/api/auth/access-check/?permission_code=users_view",
             HTTP_AUTHORIZATION=f"Bearer {token}",
         )
         self.assertEqual(access_check.status_code, 200)

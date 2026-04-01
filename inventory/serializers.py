@@ -1,25 +1,164 @@
 from rest_framework import serializers
-from .models import Category, Product, StockAdjustment
+from .models import Category, SubCategory, Product, StockAdjustment, CostPricing, StockInformation, Promotion, CardSetup
 
 class CategorySerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source='department.name', read_only=True)
+
     class Meta:
         model = Category
-        fields = '__all__'
+        fields = ['id', 'name', 'localized_name', 'department', 'department_name']
+
+
+class SubCategorySerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = SubCategory
+        fields = ['id', 'name', 'localized_name', 'category', 'category_name']
+
+
+class CostPricingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CostPricing
+        fields = [
+            'id',
+            'unit_cost',
+            'margin',
+            'buydown',
+            'markup',
+            'unit_price',
+            'msrp',
+            'min_price',
+        ]
+        read_only_fields = ['id']
+
+
+class StockInformationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockInformation
+        fields = ['id', 'enter_upcs', 'min_warn_qty']
+        read_only_fields = ['id']
+
 
 class ProductSerializer(serializers.ModelSerializer):
-    total_value = serializers.SerializerMethodField()
+    department_name = serializers.CharField(source='department.name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
-    vendor_name = serializers.CharField(source='vendor.name', read_only=True)
+    sub_category_name = serializers.CharField(source='sub_category.name', read_only=True)
+    brand_name = serializers.CharField(source='brand.name', read_only=True)
+    size_name = serializers.CharField(source='size.name', read_only=True)
+    pack_name = serializers.CharField(source='pack.name', read_only=True)
+    tax_rate_name = serializers.CharField(source='tax_rate.name', read_only=True)
+    cost_pricing = CostPricingSerializer(required=False, allow_null=True)
+    stock_information = StockInformationSerializer(required=False, allow_null=True)
 
     class Meta:
         model = Product
         fields = '__all__'
 
-    def get_total_value(self, obj):
-        return obj.stock * obj.price
+    def validate(self, attrs):
+        department = attrs.get('department') or getattr(self.instance, 'department', None)
+        category = attrs.get('category') or getattr(self.instance, 'category', None)
+        sub_category = attrs.get('sub_category') or getattr(self.instance, 'sub_category', None)
+        size = attrs.get('size') or getattr(self.instance, 'size', None)
+        non_taxable = attrs.get('non_taxable')
+        if non_taxable is None and self.instance:
+            non_taxable = self.instance.non_taxable
+        if non_taxable is None:
+            non_taxable = False
+
+        if department and category and category.department_id and category.department_id != department.id:
+            raise serializers.ValidationError({"category": "Selected category does not belong to selected department."})
+
+        if category and sub_category and sub_category.category_id and sub_category.category_id != category.id:
+            raise serializers.ValidationError({"sub_category": "Selected sub-category does not belong to selected category."})
+
+        if category and size and size.category_id and size.category_id != category.id:
+            raise serializers.ValidationError({"size": "Selected size does not belong to selected category."})
+
+        if non_taxable:
+            attrs['tax_rate'] = None
+
+        return attrs
+
+    def _upsert_cost_pricing(self, instance, payload):
+        if payload is None:
+            instance.cost_pricing = None
+            return
+
+        cost_pricing_obj = getattr(instance, "cost_pricing", None)
+        if cost_pricing_obj:
+            for key, value in payload.items():
+                setattr(cost_pricing_obj, key, value)
+            cost_pricing_obj.save()
+        else:
+            cost_pricing_obj = CostPricing.objects.create(**payload)
+        instance.cost_pricing = cost_pricing_obj
+
+    def _upsert_stock_information(self, instance, payload):
+        if payload is None:
+            instance.stock_information = None
+            return
+
+        stock_information_obj = getattr(instance, "stock_information", None)
+        if stock_information_obj:
+            for key, value in payload.items():
+                setattr(stock_information_obj, key, value)
+            stock_information_obj.save()
+        else:
+            stock_information_obj = StockInformation.objects.create(**payload)
+        instance.stock_information = stock_information_obj
+
+    def create(self, validated_data):
+        cost_pricing_payload = validated_data.pop("cost_pricing", serializers.empty)
+        stock_information_payload = validated_data.pop("stock_information", serializers.empty)
+        product = Product.objects.create(**validated_data)
+
+        if cost_pricing_payload is not serializers.empty:
+            self._upsert_cost_pricing(product, cost_pricing_payload)
+
+        if stock_information_payload is not serializers.empty:
+            self._upsert_stock_information(product, stock_information_payload)
+
+        if cost_pricing_payload is not serializers.empty or stock_information_payload is not serializers.empty:
+            product.save(update_fields=["cost_pricing", "stock_information"])
+
+        return product
+
+    def update(self, instance, validated_data):
+        cost_pricing_payload = validated_data.pop("cost_pricing", serializers.empty)
+        stock_information_payload = validated_data.pop("stock_information", serializers.empty)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        fields_to_update = list(validated_data.keys())
+
+        if cost_pricing_payload is not serializers.empty:
+            self._upsert_cost_pricing(instance, cost_pricing_payload)
+            fields_to_update.append("cost_pricing")
+
+        if stock_information_payload is not serializers.empty:
+            self._upsert_stock_information(instance, stock_information_payload)
+            fields_to_update.append("stock_information")
+
+        if fields_to_update:
+            instance.save(update_fields=list(set(fields_to_update)))
+
+        return instance
 
 class StockAdjustmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = StockAdjustment
         fields = '__all__'
         read_only_fields = ['user']
+
+
+class PromotionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Promotion
+        fields = '__all__'
+
+
+class CardSetupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CardSetup
+        fields = '__all__'

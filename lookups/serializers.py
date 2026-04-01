@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Department, Brand, Size, Pack, TaxRate
+from .models import Department, Brand, UOM, Size, Pack, TaxRate
 
 class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -11,10 +11,28 @@ class BrandSerializer(serializers.ModelSerializer):
         model = Brand
         fields = '__all__'
 
+
+class UOMSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UOM
+        fields = '__all__'
+
+
 class SizeSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    uom_name = serializers.CharField(source='uom.name', read_only=True)
+
     class Meta:
         model = Size
-        fields = '__all__'
+        fields = [
+            'id',
+            'name',
+            'localized_name',
+            'category',
+            'category_name',
+            'uom',
+            'uom_name',
+        ]
 
 class PackSerializer(serializers.ModelSerializer):
     class Meta:
