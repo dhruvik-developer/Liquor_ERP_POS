@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.db.models import Prefetch
 from .models import Category, SubCategory, Product, StockAdjustment, Promotion, CardSetup
 from .serializers import (
     CategorySerializer,
@@ -35,6 +36,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         'tax_rate',
         'cost_pricing',
         'stock_information',
+    ).prefetch_related(
+        Prefetch(
+            'stockadjustment_set',
+            queryset=StockAdjustment.objects.select_related('user').order_by('-created_at'),
+            to_attr='prefetched_stock_adjustments',
+        )
     ).all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]

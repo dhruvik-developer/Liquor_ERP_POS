@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, Vendor, VendorAddress, VendorTax
+from .models import Customer, Vendor, VendorAddress, VendorSalesContact, VendorTax
 
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -17,6 +17,12 @@ class VendorAddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = VendorAddress
         fields = '__all__'
+
+class VendorSalesContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VendorSalesContact
+        fields = ['id', 'first_name', 'last_name', 'phone', 'email']
+        read_only_fields = ['id']
 
 
 class VendorSerializer(serializers.ModelSerializer):
@@ -41,6 +47,13 @@ class VendorSerializer(serializers.ModelSerializer):
     cell_phone = serializers.CharField(write_only=True, required=False, allow_blank=True)
     fax = serializers.CharField(write_only=True, required=False, allow_blank=True)
     email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
+    sales_person_contact_details = VendorSalesContactSerializer(
+        source='sales_contacts',
+        many=True,
+        required=False,
+    )
+    vendor_core_information = serializers.DictField(write_only=True, required=False)
+    contact_address_information = serializers.DictField(write_only=True, required=False)
 
     class Meta:
         model = Vendor
@@ -70,14 +83,17 @@ class VendorSerializer(serializers.ModelSerializer):
             'cell_phone',
             'fax',
             'email',
+            'sales_person_contact_details',
+            'vendor_core_information',
+            'contact_address_information',
             'pay_term',
             'gst_number',
             'note',
             'is_active',
         ]
         extra_kwargs = {
-            'vendor_name': {'required': True, 'allow_blank': False},
-            'company_name': {'required': True, 'allow_blank': False},
+            'vendor_name': {'required': False, 'allow_blank': False},
+            'company_name': {'required': False, 'allow_blank': False},
         }
 
     ADDRESS_FIELDS = (
@@ -95,6 +111,30 @@ class VendorSerializer(serializers.ModelSerializer):
         "fax",
         "email",
     )
+    CORE_FIELDS = (
+        "vendor_name",
+        "vendor_code",
+        "company_name",
+        "default_tax_class",
+        "pdf_format",
+        "pay_term",
+        "gst_number",
+        "note",
+        "is_active",
+    )
+
+    def _apply_grouped_payload(self, validated_data):
+        core_info = validated_data.pop("vendor_core_information", None) or {}
+        if isinstance(core_info, dict):
+            for field in self.CORE_FIELDS:
+                if field in core_info and field not in validated_data:
+                    validated_data[field] = core_info[field]
+
+        address_info = validated_data.pop("contact_address_information", None) or {}
+        if isinstance(address_info, dict):
+            for field in self.ADDRESS_FIELDS:
+                if field in address_info and field not in validated_data:
+                    validated_data[field] = address_info[field]
 
     def _extract_address_payload(self, validated_data):
         payload = {}
@@ -107,9 +147,30 @@ class VendorSerializer(serializers.ModelSerializer):
     def _has_non_empty_address(payload):
         return any(str(value).strip() for value in payload.values() if value is not None)
 
+    def validate(self, attrs):
+        self._apply_grouped_payload(attrs)
+
+        current_vendor_name = getattr(self.instance, "vendor_name", "")
+        current_company_name = getattr(self.instance, "company_name", "")
+
+        vendor_name = attrs.get("vendor_name", current_vendor_name)
+        company_name = attrs.get("company_name", current_company_name)
+
+        if not str(vendor_name).strip():
+            raise serializers.ValidationError({"vendor_name": "This field is required."})
+        if not str(company_name).strip():
+            raise serializers.ValidationError({"company_name": "This field is required."})
+
+        return attrs
+
     def create(self, validated_data):
+        contacts_data = validated_data.pop("sales_contacts", [])
         address_payload = self._extract_address_payload(validated_data)
         vendor = super().create(validated_data)
+
+        for contact in contacts_data:
+            VendorSalesContact.objects.create(vendor=vendor, **contact)
+
         if address_payload and self._has_non_empty_address(address_payload):
             address_obj = VendorAddress.objects.create(**address_payload)
             vendor.address = address_obj
@@ -117,8 +178,14 @@ class VendorSerializer(serializers.ModelSerializer):
         return vendor
 
     def update(self, instance, validated_data):
+        contacts_data = validated_data.pop("sales_contacts", None)
         address_payload = self._extract_address_payload(validated_data)
         vendor = super().update(instance, validated_data)
+
+        if contacts_data is not None:
+            vendor.sales_contacts.all().delete()
+            for contact in contacts_data:
+                VendorSalesContact.objects.create(vendor=vendor, **contact)
 
         if address_payload:
             if vendor.address:
@@ -131,3 +198,37 @@ class VendorSerializer(serializers.ModelSerializer):
                 vendor.save(update_fields=["address"])
 
         return vendor
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        data["vendor_core_information"] = {
+            "vendor_name": data.get("vendor_name"),
+            "vendor_code": data.get("vendor_code"),
+            "company_name": data.get("company_name"),
+            "default_tax_class": data.get("default_tax_class"),
+            "default_tax_class_name": data.get("default_tax_class_name"),
+            "default_tax_class_rate": data.get("default_tax_class_rate"),
+            "pdf_format": data.get("pdf_format"),
+            "pay_term": data.get("pay_term"),
+            "gst_number": data.get("gst_number"),
+            "note": data.get("note"),
+            "is_active": data.get("is_active"),
+        }
+
+        data["contact_address_information"] = data.get("address_details") or {
+            "address_1": "",
+            "address_2": "",
+            "city": "",
+            "state": "",
+            "zip": "",
+            "code": "",
+            "ext": "",
+            "country": "",
+            "phone_1": "",
+            "phone_2": "",
+            "cell_phone": "",
+            "fax": "",
+            "email": "",
+        }
+        return data

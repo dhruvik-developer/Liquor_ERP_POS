@@ -68,3 +68,19 @@ class Vendor(TimeStampedModel):
 
     def __str__(self):
         return self.vendor_name
+
+
+class VendorSalesContact(models.Model):
+    vendor = models.ForeignKey(
+        Vendor,
+        on_delete=models.CASCADE,
+        related_name="sales_contacts",
+    )
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=20, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+
+    def __str__(self):
+        full_name = f"{self.first_name} {self.last_name}".strip()
+        return full_name or f"VendorSalesContact {self.id}"

@@ -25,7 +25,7 @@ class VendorAddressViewSet(viewsets.ModelViewSet):
 
 
 class VendorViewSet(viewsets.ModelViewSet):
-    queryset = Vendor.objects.select_related('default_tax_class', 'address').order_by('-created_at')
+    queryset = Vendor.objects.select_related('default_tax_class', 'address').prefetch_related('sales_contacts').order_by('-created_at')
     serializer_class = VendorSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['vendor_name', 'vendor_code', 'company_name', 'default_tax_class', 'gst_number', 'is_active']

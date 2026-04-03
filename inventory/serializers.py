@@ -73,6 +73,7 @@ class ProductSerializer(serializers.ModelSerializer):
     tax_rate_name = serializers.CharField(source='tax_rate.name', read_only=True)
     cost_pricing = CostPricingSerializer(required=False, allow_null=True)
     stock_information = StockInformationSerializer(required=False, allow_null=True)
+    total_stock_available = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -167,6 +168,22 @@ class ProductSerializer(serializers.ModelSerializer):
             instance.save(update_fields=list(set(fields_to_update)))
 
         return instance
+
+    def _get_adjustments(self, obj):
+        adjustments = getattr(obj, "prefetched_stock_adjustments", None)
+        if adjustments is None:
+            adjustments = obj.stockadjustment_set.select_related('user').order_by('-created_at')
+        return adjustments
+
+    def get_total_stock_available(self, obj):
+        adjustments = self._get_adjustments(obj)
+        total = 0
+        for adjustment in adjustments:
+            if adjustment.adjustment_type == "add":
+                total += adjustment.quantity
+            elif adjustment.adjustment_type == "reduce":
+                total -= adjustment.quantity
+        return total
 
 class StockAdjustmentSerializer(serializers.ModelSerializer):
     class Meta:
