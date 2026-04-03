@@ -11,10 +11,33 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class SubCategorySerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
+    category_department_name = serializers.CharField(source='category.department.name', read_only=True)
+    sub_category = serializers.CharField(source='name', read_only=True)
+    category_display = serializers.SerializerMethodField()
+
+    def get_category_display(self, obj):
+        category_name = getattr(obj.category, "name", "") if obj.category else ""
+        department_name = (
+            getattr(obj.category.department, "name", "")
+            if obj.category and obj.category.department
+            else ""
+        )
+        if category_name and department_name:
+            return f"{category_name} -> {department_name}"
+        return category_name or department_name or ""
 
     class Meta:
         model = SubCategory
-        fields = ['id', 'name', 'localized_name', 'category', 'category_name']
+        fields = [
+            'id',
+            'name',
+            'sub_category',
+            'localized_name',
+            'category',
+            'category_name',
+            'category_department_name',
+            'category_display',
+        ]
 
 
 class CostPricingSerializer(serializers.ModelSerializer):

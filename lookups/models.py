@@ -41,6 +41,17 @@ class Size(models.Model):
         blank=True,
         related_name="sizes",
     )
+    no_of_units = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    units_in_case = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    tax_factor = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    unit_price_factor = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    unit_price_uom = models.ForeignKey(
+        "lookups.UOM",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="unit_price_sizes",
+    )
 
     def __str__(self):
         return self.name

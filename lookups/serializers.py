@@ -21,6 +21,7 @@ class UOMSerializer(serializers.ModelSerializer):
 class SizeSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     uom_name = serializers.CharField(source='uom.name', read_only=True)
+    unit_price_uom_name = serializers.CharField(source='unit_price_uom.name', read_only=True)
 
     class Meta:
         model = Size
@@ -32,6 +33,12 @@ class SizeSerializer(serializers.ModelSerializer):
             'category_name',
             'uom',
             'uom_name',
+            'no_of_units',
+            'units_in_case',
+            'tax_factor',
+            'unit_price_factor',
+            'unit_price_uom',
+            'unit_price_uom_name',
         ]
 
 class PackSerializer(serializers.ModelSerializer):

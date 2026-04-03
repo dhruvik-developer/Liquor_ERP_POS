@@ -8,7 +8,12 @@ from .serializers import PurchaseOrderSerializer, PurchaseBillSerializer, Purcha
 from inventory.models import Product
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
-    queryset = PurchaseOrder.objects.select_related('vendor').prefetch_related('items').order_by('-created_at')
+    queryset = (
+        PurchaseOrder.objects
+        .select_related('vendor', 'vendor__default_tax_class', 'vendor__address')
+        .prefetch_related('items')
+        .order_by('-created_at')
+    )
     serializer_class = PurchaseOrderSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['vendor', 'status']

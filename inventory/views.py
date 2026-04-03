@@ -19,7 +19,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class SubCategoryViewSet(viewsets.ModelViewSet):
-    queryset = SubCategory.objects.select_related('category').all()
+    queryset = SubCategory.objects.select_related('category', 'category__department').all()
     serializer_class = SubCategorySerializer
     permission_classes = [IsAuthenticated]
 
