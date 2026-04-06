@@ -1,5 +1,16 @@
 from rest_framework import serializers
 from .models import Category, SubCategory, Product, StockAdjustment, CostPricing, StockInformation, Promotion, CardSetup
+import base64
+import uuid
+from django.core.files.base import ContentFile
+
+class Base64ImageField(serializers.ImageField):
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:image'):
+            format, imgstr = data.split(';base64,')
+            ext = format.split('/')[-1]
+            data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4()}.{ext}")
+        return super().to_internal_value(data)
 
 class CategorySerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source='department.name', read_only=True)
@@ -73,6 +84,7 @@ class ProductSerializer(serializers.ModelSerializer):
     tax_rate_name = serializers.CharField(source='tax_rate.name', read_only=True)
     cost_pricing = CostPricingSerializer(required=False, allow_null=True)
     stock_information = StockInformationSerializer(required=False, allow_null=True)
+    image = Base64ImageField(required=False, allow_null=True)
     total_stock_available = serializers.SerializerMethodField()
 
     class Meta:
@@ -176,14 +188,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return adjustments
 
     def get_total_stock_available(self, obj):
-        adjustments = self._get_adjustments(obj)
-        total = 0
-        for adjustment in adjustments:
-            if adjustment.adjustment_type == "add":
-                total += adjustment.quantity
-            elif adjustment.adjustment_type == "reduce":
-                total -= adjustment.quantity
-        return total
+        return obj.stock
 
 class StockAdjustmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -193,6 +198,7 @@ class StockAdjustmentSerializer(serializers.ModelSerializer):
 
 
 class PromotionSerializer(serializers.ModelSerializer):
+    image = Base64ImageField(required=False, allow_null=True)
     class Meta:
         model = Promotion
         fields = '__all__'

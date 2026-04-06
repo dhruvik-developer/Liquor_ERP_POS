@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from .models import PurchaseOrder, PurchaseBill, PurchaseReturn
 from .serializers import PurchaseOrderSerializer, PurchaseBillSerializer, PurchaseReturnSerializer
-from inventory.models import Product
+from inventory.models import Product, StockAdjustment
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
     queryset = (
@@ -44,6 +44,15 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                         product = item.product
                         product.stock += received_qty
                         product.save(update_fields=['stock'])
+
+                        # Create Stock Adjustment record
+                        StockAdjustment.objects.create(
+                            product=product,
+                            user=request.user,
+                            adjustment_type='add',
+                            quantity=received_qty,
+                            reason=f"Received for PO {po.po_number}",
+                        )
             else:
                 if not isinstance(items_payload, list):
                     return Response(
@@ -118,6 +127,15 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                         product = item.product
                         product.stock += received_qty
                         product.save(update_fields=['stock'])
+
+                        # Create Stock Adjustment record
+                        StockAdjustment.objects.create(
+                            product=product,
+                            user=request.user,
+                            adjustment_type='add',
+                            quantity=received_qty,
+                            reason=f"Received for PO {po.po_number}",
+                        )
 
             # Compute totals from the same in-memory list we updated to avoid stale
             # prefetched relation cache on `po.items`.

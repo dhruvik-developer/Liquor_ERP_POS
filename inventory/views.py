@@ -70,6 +70,14 @@ class StockAdjustmentViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             adjustment = serializer.save(user=request.user)
+            # Update product stock
+            product = adjustment.product
+            quantity = adjustment.quantity
+            if adjustment.adjustment_type == 'add':
+                product.stock += quantity
+            else:
+                product.stock -= quantity
+            product.save(update_fields=['stock'])
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 

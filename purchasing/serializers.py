@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import PurchaseOrder, PurchaseOrderItem, PurchaseBill, PurchaseBillItemsDetail, PurchaseReturn
 from people.serializers import VendorSerializer
+from inventory.models import StockAdjustment
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -56,9 +57,32 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_detail = validated_data.pop('items_detail', [])
+        purchase_order = validated_data.get('purchase_order')
         bill = PurchaseBill.objects.create(**validated_data)
+        
+        request = self.context.get('request')
+        user = request.user if request else None
+
         for item_data in items_detail:
-            PurchaseBillItemsDetail.objects.create(purchase_bill=bill, **item_data)
+            item = PurchaseBillItemsDetail.objects.create(purchase_bill=bill, **item_data)
+            
+            # If Direct Bill (no purchase order), update stock
+            if purchase_order is None:
+                quantity = item.quantity_received if item.quantity_received > 0 else item.quantity_ordered
+                if quantity > 0:
+                    product = item.product
+                    if hasattr(product, 'stock'):
+                        product.stock += quantity
+                        product.save(update_fields=['stock'])
+                        
+                        # Create Stock Adjustment record
+                        StockAdjustment.objects.create(
+                            product=product,
+                            user=user,
+                            adjustment_type='add',
+                            quantity=quantity,
+                            reason=f"Direct Bill {bill.bill_number}",
+                        )
         return bill
 
     def update(self, instance, validated_data):

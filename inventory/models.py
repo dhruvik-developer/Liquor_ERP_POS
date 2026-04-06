@@ -60,7 +60,7 @@ class Promotion(TimeStampedModel):
     title = models.CharField(max_length=255)
     tagline = models.CharField(max_length=255, blank=True, default="")
     description = models.TextField(blank=True, default="")
-    image_base64 = models.TextField(blank=True, default="")
+    image = models.ImageField(upload_to='promotions/', blank=True, null=True)
     status = models.BooleanField(default=True)
 
     class Meta:
@@ -144,13 +144,14 @@ class Product(models.Model):
         blank=True,
         related_name="product",
     )
+    stock = models.IntegerField(default=0)
     item_is_inactive = models.BooleanField(default=False)
     buy_as_case = models.BooleanField(default=False)
     units_in_case = models.CharField(max_length=50, blank=True, default="")
     case_cost = models.CharField(max_length=50, blank=True, default="")
     case_price = models.CharField(max_length=50, blank=True, default="")
     non_discountable = models.BooleanField(default=False)
-    image_base64 = models.TextField(blank=True, default="")
+    image = models.ImageField(upload_to='products/', blank=True, null=True)
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
