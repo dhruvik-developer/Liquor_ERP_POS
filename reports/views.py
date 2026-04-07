@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
 from django.db.models import Count, DecimalField, IntegerField, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -70,6 +71,18 @@ class DashboardAPIView(APIView):
         critical_threshold = max(1, threshold // 2)
         return "critical" if stock <= critical_threshold else "low"
 
+    def _build_image_url(self, request, image_path):
+        if not image_path:
+            return None
+
+        image_str = str(image_path)
+        if image_str.startswith("http://") or image_str.startswith("https://"):
+            return image_str
+
+        media_prefix = settings.MEDIA_URL.rstrip("/")
+        relative_path = image_str.lstrip("/")
+        return request.build_absolute_uri(f"{media_prefix}/{relative_path}")
+
     def get(self, request):
         period_end = timezone.now()
         period_start = period_end - timedelta(days=self.PERIOD_DAYS)
@@ -132,7 +145,7 @@ class DashboardAPIView(APIView):
             order__created_at__lt=period_end,
         ).values(
             "product__name",
-            "product__image_base64",
+            "product__image",
         ).annotate(
             sold=Coalesce(Sum("quantity"), count_zero),
             revenue=Coalesce(Sum("subtotal"), money_zero),
@@ -143,7 +156,7 @@ class DashboardAPIView(APIView):
                 "name": row["product__name"],
                 "sold": row["sold"],
                 "revenue": self._to_money(row["revenue"]),
-                "image": row["product__image_base64"],
+                "image": self._build_image_url(request, row["product__image"]),
             }
             for row in top_selling_queryset
         ]

@@ -2,14 +2,51 @@ from rest_framework import serializers
 from .models import Category, SubCategory, Product, StockAdjustment, CostPricing, StockInformation, Promotion, CardSetup
 import base64
 import uuid
+import binascii
+from urllib.error import URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+import mimetypes
 from django.core.files.base import ContentFile
 
 class Base64ImageField(serializers.ImageField):
+    MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+    def _build_content_file_from_url(self, image_url: str):
+        try:
+            request = Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urlopen(request, timeout=10) as response:
+                content_type = response.headers.get_content_type()
+                if not content_type or not content_type.startswith("image/"):
+                    raise serializers.ValidationError("Provided image URL is not a valid image.")
+
+                raw_bytes = response.read(self.MAX_IMAGE_BYTES + 1)
+                if len(raw_bytes) > self.MAX_IMAGE_BYTES:
+                    raise serializers.ValidationError("Image is too large. Max allowed size is 5MB.")
+        except URLError:
+            raise serializers.ValidationError("Could not fetch image from URL.")
+
+        parsed_url = urlparse(image_url)
+        extension = mimetypes.guess_extension(content_type)
+        if not extension:
+            extension = parsed_url.path.rsplit(".", 1)[-1] if "." in parsed_url.path else "jpg"
+            extension = extension if str(extension).startswith(".") else f".{extension}"
+        return ContentFile(raw_bytes, name=f"{uuid.uuid4()}{extension}")
+
     def to_internal_value(self, data):
-        if isinstance(data, str) and data.startswith('data:image'):
-            format, imgstr = data.split(';base64,')
-            ext = format.split('/')[-1]
-            data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4()}.{ext}")
+        if isinstance(data, str):
+            data = data.strip()
+            if data == "":
+                return None
+            if data.startswith('data:image'):
+                try:
+                    format, imgstr = data.split(';base64,')
+                    ext = format.split('/')[-1]
+                    data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4()}.{ext}")
+                except (ValueError, binascii.Error):
+                    raise serializers.ValidationError("Invalid base64 image data.")
+            elif data.startswith("http://") or data.startswith("https://"):
+                data = self._build_content_file_from_url(data)
         return super().to_internal_value(data)
 
 class CategorySerializer(serializers.ModelSerializer):
