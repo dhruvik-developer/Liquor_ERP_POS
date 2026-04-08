@@ -145,9 +145,6 @@ class ProductSerializer(serializers.ModelSerializer):
         if category and sub_category and sub_category.category_id and sub_category.category_id != category.id:
             raise serializers.ValidationError({"sub_category": "Selected sub-category does not belong to selected category."})
 
-        if category and size and size.category_id and size.category_id != category.id:
-            raise serializers.ValidationError({"size": "Selected size does not belong to selected category."})
-
         if non_taxable:
             attrs['tax_rate'] = None
 

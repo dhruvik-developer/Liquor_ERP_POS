@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.core.validators import MinValueValidator
 from usermgmt.models import TimeStampedModel
@@ -26,6 +27,7 @@ class PurchaseOrderItem(models.Model):
 
 class PurchaseBill(TimeStampedModel):
     bill_number = models.CharField(max_length=100, unique=True)
+    invoice_number = models.CharField(max_length=100)
     vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT)
     purchase_order = models.ForeignKey(PurchaseOrder, null=True, blank=True, on_delete=models.SET_NULL)
     sales_person = models.CharField(max_length=255, blank=True, default="")
@@ -44,6 +46,12 @@ class PurchaseBill(TimeStampedModel):
     note = models.TextField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
+        if isinstance(self.invoice_number, str):
+            self.invoice_number = self.invoice_number.strip()
+
+        if not self.invoice_number:
+            raise ValidationError({"invoice_number": "Invoice number is required."})
+
         if not self.bill_number:
             last_bill_numbers = (
                 PurchaseBill.objects
@@ -72,9 +80,59 @@ class PurchaseBillItemsDetail(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
 
 class PurchaseReturn(TimeStampedModel):
-    STATUS_CHOICES = [('Pending', 'Pending'), ('Processed', 'Processed')]
-    return_number = models.CharField(max_length=50, unique=True)
+    PAID_STATUS_CHOICES = [('Paid', 'Paid'), ('Unpaid', 'Unpaid'), ('Partial', 'Partial')]
+
+    return_bill_number = models.CharField(max_length=50, unique=True, blank=True, default="")
     vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT)
-    reason = models.TextField()
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    bill = models.ForeignKey(PurchaseBill, related_name='returns', null=True, blank=True, on_delete=models.PROTECT)
+    return_date = models.DateField(null=True, blank=True)
+    bill_date = models.DateField(null=True, blank=True)
+    due_date = models.DateTimeField(null=True, blank=True)
+    paid_status = models.CharField(max_length=20, choices=PAID_STATUS_CHOICES, default='Unpaid')
+    note = models.TextField(blank=True, default="")
+    other_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    total_returns = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    sub_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    total_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    @classmethod
+    def get_next_return_bill_number(cls):
+        last_return_numbers = (
+            cls.objects
+            .exclude(return_bill_number='')
+            .order_by('-id')
+            .values_list('return_bill_number', flat=True)
+        )
+        next_seq = 1
+        for number in last_return_numbers:
+            if str(number).isdigit():
+                next_seq = int(number) + 1
+                break
+
+        candidate = str(next_seq)
+        while cls.objects.filter(return_bill_number=candidate).exists():
+            next_seq += 1
+            candidate = str(next_seq)
+        return candidate
+
+    def save(self, *args, **kwargs):
+        duplicate_exists = PurchaseReturn.objects.exclude(pk=self.pk).filter(
+            return_bill_number=self.return_bill_number
+        ).exists()
+        if not self.return_bill_number or duplicate_exists:
+            self.return_bill_number = self.get_next_return_bill_number()
+
+        super().save(*args, **kwargs)
+
+
+class PurchaseReturnItem(models.Model):
+    purchase_return = models.ForeignKey(PurchaseReturn, related_name='items', on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    sku = models.CharField(max_length=100, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    selected = models.BooleanField(default=True)
+    quantity_received = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    quantity_returned = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    landing_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)

@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.db.models import F
 from .models import PurchaseOrder, PurchaseBill, PurchaseReturn
 from .serializers import PurchaseOrderSerializer, PurchaseBillSerializer, PurchaseReturnSerializer
 from inventory.models import Product, StockAdjustment
@@ -41,13 +42,11 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                     item.save(update_fields=['quantity_received'])
 
                     if stock_fields_available:
-                        product = item.product
-                        product.stock += received_qty
-                        product.save(update_fields=['stock'])
+                        Product.objects.filter(pk=item.product_id).update(stock=F('stock') + received_qty)
 
                         # Create Stock Adjustment record
                         StockAdjustment.objects.create(
-                            product=product,
+                            product_id=item.product_id,
                             user=request.user,
                             adjustment_type='add',
                             quantity=received_qty,
@@ -124,13 +123,11 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                     item.save(update_fields=['quantity_received'])
 
                     if stock_fields_available:
-                        product = item.product
-                        product.stock += received_qty
-                        product.save(update_fields=['stock'])
+                        Product.objects.filter(pk=item.product_id).update(stock=F('stock') + received_qty)
 
                         # Create Stock Adjustment record
                         StockAdjustment.objects.create(
-                            product=product,
+                            product_id=item.product_id,
                             user=request.user,
                             adjustment_type='add',
                             quantity=received_qty,
@@ -167,6 +164,11 @@ class PurchaseBillViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 class PurchaseReturnViewSet(viewsets.ModelViewSet):
-    queryset = PurchaseReturn.objects.select_related('vendor').order_by('-created_at')
+    queryset = (
+        PurchaseReturn.objects
+        .select_related('vendor', 'bill')
+        .prefetch_related('items')
+        .order_by('-created_at')
+    )
     serializer_class = PurchaseReturnSerializer
     permission_classes = [IsAuthenticated]

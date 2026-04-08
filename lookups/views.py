@@ -30,7 +30,7 @@ class UOMViewSet(viewsets.ModelViewSet):
 
 
 class SizeViewSet(viewsets.ModelViewSet):
-    queryset = Size.objects.select_related('category', 'uom', 'unit_price_uom').all()
+    queryset = Size.objects.select_related('uom', 'unit_price_uom').all()
     serializer_class = SizeSerializer
     permission_classes = [IsAuthenticated]
 

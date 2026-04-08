@@ -143,6 +143,7 @@ class DashboardAPIView(APIView):
         top_selling_queryset = completed_items.filter(
             order__created_at__gte=period_start,
             order__created_at__lt=period_end,
+            product__item_is_inactive=False,
         ).values(
             "product__name",
             "product__image",

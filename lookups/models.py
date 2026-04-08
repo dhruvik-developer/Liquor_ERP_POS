@@ -27,13 +27,6 @@ class UOM(models.Model):
 class Size(models.Model):
     name = models.CharField(max_length=50, unique=True)
     localized_name = models.CharField(max_length=100, blank=True, default="")
-    category = models.ForeignKey(
-        "inventory.Category",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="sizes",
-    )
     uom = models.ForeignKey(
         "lookups.UOM",
         on_delete=models.SET_NULL,
@@ -60,6 +53,7 @@ class Size(models.Model):
 class Pack(models.Model):
     name = models.CharField(max_length=50, unique=True)
     localized_name = models.CharField(max_length=100, blank=True, default="")
+    units_in_pack = models.PositiveIntegerField(default=1)
 
     def __str__(self):
         return self.name
