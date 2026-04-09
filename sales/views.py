@@ -3,8 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction
-from .models import CashDrawerShift, SalesOrder
-from .serializers import CashDrawerShiftSerializer, SalesOrderSerializer
+from .models import CashDrawerShift, SalesOrder, SalesReturn
+from .serializers import CashDrawerShiftSerializer, SalesOrderSerializer, SalesReturnSerializer
 
 class CashDrawerShiftViewSet(viewsets.ModelViewSet):
     queryset = CashDrawerShift.objects.order_by('-opened_at')
@@ -65,3 +65,18 @@ class SalesOrderViewSet(viewsets.ModelViewSet):
 
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class SalesReturnViewSet(viewsets.ModelViewSet):
+    queryset = (
+        SalesReturn.objects
+        .select_related('order', 'store', 'cashier', 'customer')
+        .prefetch_related('items__product')
+        .order_by('-created_at')
+    )
+    serializer_class = SalesReturnSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ['store', 'order', 'cashier', 'status']
+
+    def perform_create(self, serializer):
+        serializer.save(cashier=self.request.user)

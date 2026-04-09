@@ -15,6 +15,7 @@ from .serializers import (
     PermissionCreateSerializer,
     PermissionSerializer,
     RoleCreateSerializer,
+    RoleUpdateSerializer,
     RoleSerializer,
     UserCreateSerializer,
     UserPermissionOverrideSerializer,
@@ -166,11 +167,33 @@ class UserViewSet(BaseERPAPIView):
 
         if User.objects.filter(email=payload["email"]).exists():
             return self.deny("Email already exists", status.HTTP_409_CONFLICT)
+        user_identifier = payload.get("user_id")
+        if user_identifier and User.objects.filter(user_id=user_identifier).exists():
+            return self.deny("User ID already exists", status.HTTP_409_CONFLICT)
+
+        display_name = (
+            payload.get("name")
+            or " ".join([part for part in [payload.get("first_name", "").strip(), payload.get("last_name", "").strip()] if part])
+            or user_identifier
+            or payload["email"]
+        )
 
         user = User(
-            name=payload["name"],
+            name=display_name,
+            user_id=user_identifier or None,
+            gender=payload.get("gender", ""),
+            first_name=payload.get("first_name", ""),
+            last_name=payload.get("last_name", ""),
             email=payload["email"],
             mobile_number=payload.get("mobile_number", ""),
+            address_1=payload.get("address_1", ""),
+            address_2=payload.get("address_2", ""),
+            city=payload.get("city", ""),
+            state=payload.get("state", ""),
+            zip_code=payload.get("zip_code", ""),
+            phone=payload.get("phone", ""),
+            phone_ext=payload.get("phone_ext", ""),
+            country=payload.get("country", ""),
             is_active=payload.get("is_active", True),
             is_super_admin=payload.get("is_super_admin", False),
             role_id=payload.get("role_id"),
@@ -211,10 +234,36 @@ class UserDetailViewSet(BaseERPAPIView):
         serializer = UserUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        previous_user_id = user.user_id
 
-        for field in ["name", "mobile_number", "is_active", "is_super_admin", "role_id"]:
+        for field in [
+            "name",
+            "user_id",
+            "gender",
+            "first_name",
+            "last_name",
+            "mobile_number",
+            "address_1",
+            "address_2",
+            "city",
+            "state",
+            "zip_code",
+            "phone",
+            "phone_ext",
+            "country",
+            "is_active",
+            "is_super_admin",
+            "role_id",
+        ]:
             if field in payload:
                 setattr(user, field, payload[field])
+
+        if payload.get("user_id") == "":
+            user.user_id = None
+
+        if payload.get("user_id") and payload["user_id"] != previous_user_id:
+            if User.objects.filter(user_id=payload["user_id"]).exclude(id=user.id).exists():
+                return self.deny("User ID already exists", status.HTTP_409_CONFLICT)
 
         if payload.get("email") and payload["email"] != user.email:
             if User.objects.filter(email=payload["email"]).exclude(id=user.id).exists():
@@ -271,6 +320,66 @@ class RoleViewSet(BaseERPAPIView):
 
         role = Role.objects.prefetch_related("role_permissions").get(id=role.id)
         return self.allow("Role created successfully", RoleSerializer(role).data, status.HTTP_201_CREATED)
+
+
+class RoleDetailViewSet(BaseERPAPIView):
+    def get_object(self, role_id):
+        return Role.objects.prefetch_related("role_permissions").filter(id=role_id).first()
+
+    def get(self, request, role_id):
+        denied = self.enforce_permission(request, "settings_view")
+        if denied:
+            return denied
+
+        role = self.get_object(role_id)
+        if not role:
+            return self.deny("Role not found", status.HTTP_404_NOT_FOUND)
+        return self.allow("Role details", RoleSerializer(role).data)
+
+    def put(self, request, role_id):
+        denied = self.enforce_permission(request, "settings_edit")
+        if denied:
+            return denied
+
+        role = self.get_object(role_id)
+        if not role:
+            return self.deny("Role not found", status.HTTP_404_NOT_FOUND)
+
+        serializer = RoleUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        if "name" in payload:
+            new_name = payload["name"]
+            if Role.objects.filter(name=new_name).exclude(id=role.id).exists():
+                return self.deny("Role already exists", status.HTTP_409_CONFLICT)
+            role.name = new_name
+
+        if "description" in payload:
+            role.description = payload["description"]
+
+        role.save()
+
+        if "permission_ids" in payload:
+            assign_role_permissions(role.id, payload["permission_ids"])
+
+        role = Role.objects.prefetch_related("role_permissions").get(id=role.id)
+        return self.allow("Role updated successfully", RoleSerializer(role).data)
+
+    def patch(self, request, role_id):
+        return self.put(request, role_id)
+
+    def delete(self, request, role_id):
+        denied = self.enforce_permission(request, "settings_delete")
+        if denied:
+            return denied
+
+        role = self.get_object(role_id)
+        if not role:
+            return self.deny("Role not found", status.HTTP_404_NOT_FOUND)
+
+        role.delete()
+        return self.allow("Role deleted")
 
 
 class PermissionViewSet(BaseERPAPIView):

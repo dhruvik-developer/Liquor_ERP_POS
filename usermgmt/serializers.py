@@ -44,8 +44,20 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "user_id",
+            "gender",
+            "first_name",
+            "last_name",
             "email",
             "mobile_number",
+            "address_1",
+            "address_2",
+            "city",
+            "state",
+            "zip_code",
+            "phone",
+            "phone_ext",
+            "country",
             "is_active",
             "is_super_admin",
             "role",
@@ -70,9 +82,21 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=150)
+    name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    user_id = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    gender = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     email = serializers.EmailField()
     mobile_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    address_1 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    address_2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    state = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    zip_code = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    phone_ext = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True)
     password = serializers.CharField(write_only=True)
     is_active = serializers.BooleanField(required=False, default=True)
     is_super_admin = serializers.BooleanField(required=False, default=False)
@@ -82,8 +106,20 @@ class UserCreateSerializer(serializers.Serializer):
 
 class UserUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False)
+    user_id = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    gender = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     email = serializers.EmailField(required=False)
     mobile_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    address_1 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    address_2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    state = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    zip_code = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    phone_ext = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, required=False)
     is_active = serializers.BooleanField(required=False)
     is_super_admin = serializers.BooleanField(required=False)
@@ -93,6 +129,12 @@ class UserUpdateSerializer(serializers.Serializer):
 
 class RoleCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
+    description = serializers.CharField(required=False, allow_blank=True)
+    permission_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
+
+
+class RoleUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, required=False)
     description = serializers.CharField(required=False, allow_blank=True)
     permission_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
 

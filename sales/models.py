@@ -43,3 +43,53 @@ class SalesOrderItem(models.Model):
     quantity = models.IntegerField()
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+
+
+class SalesReturn(TimeStampedModel):
+    STATUS_CHOICES = [('Draft', 'Draft'), ('Completed', 'Completed')]
+
+    return_number = models.CharField(max_length=50, unique=True, blank=True, default="")
+    order = models.ForeignKey(SalesOrder, related_name='returns', on_delete=models.PROTECT)
+    store = models.ForeignKey(Store, on_delete=models.PROTECT)
+    cashier = models.ForeignKey(User, on_delete=models.PROTECT)
+    customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL)
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Completed')
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    @classmethod
+    def get_next_return_number(cls):
+        date_part = datetime.datetime.now().strftime('%y%m%d')
+        prefix = f"SR-{date_part}-"
+        last_return = (
+            cls.objects
+            .filter(return_number__startswith=prefix)
+            .order_by('-id')
+            .values_list('return_number', flat=True)
+            .first()
+        )
+
+        next_seq = 1
+        if last_return:
+            try:
+                next_seq = int(last_return.split('-')[-1]) + 1
+            except (ValueError, IndexError):
+                next_seq = 1
+        return f"{prefix}{next_seq:04d}"
+
+    def save(self, *args, **kwargs):
+        if not self.return_number:
+            self.return_number = self.get_next_return_number()
+        super().save(*args, **kwargs)
+
+
+class SalesReturnItem(models.Model):
+    sales_return = models.ForeignKey(SalesReturn, related_name='items', on_delete=models.CASCADE)
+    order_item = models.ForeignKey(SalesOrderItem, null=True, blank=True, on_delete=models.SET_NULL)
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    quantity = models.IntegerField()
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
