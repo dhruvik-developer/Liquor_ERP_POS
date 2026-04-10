@@ -1,5 +1,5 @@
 from django.utils.deprecation import MiddlewareMixin
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework.exceptions import AuthenticationFailed
 
 from .drf_auth import JWTAuthentication
 
@@ -10,18 +10,14 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
         request.jwt_payload = None
 
         auth = JWTAuthentication()
-        header = auth.get_header(request)
-        if header is None:
+        try:
+            authenticated = auth.authenticate(request)
+        except AuthenticationFailed:
+            return None
+        if authenticated is None:
             return None
 
-        try:
-            raw_token = auth.get_raw_token(header)
-            if raw_token is None:
-                return None
-            validated_token = auth.get_validated_token(raw_token)
-            user = auth.get_user(validated_token)
-        except (InvalidToken, TokenError):
-            return None
+        user, validated_token = authenticated
 
         request.erp_user = user
         request.jwt_payload = dict(validated_token.payload)

@@ -1,6 +1,7 @@
 import json
 
 from django.test import Client, TestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Permission, Role, RolePermission, Store, User, UserPermissionOverride, UserStoreMapping
 from .services import get_effective_permission_codes, has_permission, has_store_access
@@ -69,3 +70,17 @@ class AuthFlowTests(TestCase):
         )
         self.assertEqual(access_check.status_code, 200)
         self.assertTrue(access_check.json()["data"]["has_permission"])
+
+    def test_logout_with_deleted_user_token_returns_401_instead_of_500(self):
+        access_token = str(RefreshToken.for_user(self.user).access_token)
+        self.user.delete()
+
+        response = self.client.post(
+            "/api/auth/logout/",
+            data=json.dumps({}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["message"], "User not found")
