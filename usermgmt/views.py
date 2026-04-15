@@ -11,6 +11,8 @@ from .serializers import (
     AssignRolePermissionsSerializer,
     AssignRoleSerializer,
     AssignStoresSerializer,
+    ForgotPasswordAdminCheckSerializer,
+    ForgotPasswordSerializer,
     LoginSerializer,
     PermissionCreateSerializer,
     PermissionSerializer,
@@ -125,6 +127,86 @@ class TokenRefreshViewSet(generics.GenericAPIView):
                         "token_type": "Bearer",
                     }
                 },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ForgotPasswordViewSet(generics.GenericAPIView):
+    serializer_class = ForgotPasswordSerializer
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _is_admin_user(self, user):
+        return user.is_super_admin or (user.role and user.role.name.strip().lower() == "admin")
+
+    def _get_user_from_email(self, email):
+        try:
+            return User.objects.select_related("role").get(email=email, is_active=True)
+        except User.DoesNotExist:
+            return None
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = self._get_user_from_email(serializer.validated_data["email"])
+        if not user:
+            return Response(
+                {"status": False, "message": "User not found", "data": {}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not self._is_admin_user(user):
+            return Response(
+                {"status": False, "message": "Only admin can change forgotten password", "data": {}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password", "updated_at"])
+
+        return Response(
+            {
+                "status": True,
+                "message": "Password changed successfully",
+                "data": {"user_id": user.id, "email": user.email},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ForgotPasswordAdminCheckViewSet(generics.GenericAPIView):
+    serializer_class = ForgotPasswordAdminCheckSerializer
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _is_admin_user(self, user):
+        return user.is_super_admin or (user.role and user.role.name.strip().lower() == "admin")
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            user = User.objects.select_related("role").get(email=serializer.validated_data["email"], is_active=True)
+        except User.DoesNotExist:
+            return Response(
+                {"status": False, "message": "User not found", "data": {"is_admin": False}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not self._is_admin_user(user):
+            return Response(
+                {"status": False, "message": "User is not an admin", "data": {"is_admin": False, "email": user.email}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return Response(
+            {
+                "status": True,
+                "message": "Admin user found",
+                "data": {"is_admin": True, "email": user.email, "user_id": user.id},
             },
             status=status.HTTP_200_OK,
         )

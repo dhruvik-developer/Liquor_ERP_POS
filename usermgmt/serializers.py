@@ -1,3 +1,5 @@
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from .models import Permission, Role, User
@@ -15,6 +17,27 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("username or email is required")
         attrs["login_identifier"] = email or username
         return attrs
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Password confirmation does not match"})
+
+        try:
+            validate_password(attrs["new_password"])
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"new_password": list(exc.messages)}) from exc
+
+        return attrs
+
+
+class ForgotPasswordAdminCheckSerializer(serializers.Serializer):
+    email = serializers.EmailField()
 
 
 class PermissionSerializer(serializers.ModelSerializer):

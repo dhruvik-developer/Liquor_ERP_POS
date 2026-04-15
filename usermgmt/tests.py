@@ -42,6 +42,7 @@ class AuthFlowTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.role = Role.objects.create(name="Admin")
+        self.staff_role = Role.objects.create(name="Cashier")
 
         self.p_users_view = Permission.objects.create(module="users", action="view", code="users_view")
         self.p_settings_view = Permission.objects.create(module="settings", action="view", code="settings_view")
@@ -54,6 +55,10 @@ class AuthFlowTests(TestCase):
         self.user = User.objects.create(name="Admin", email="admin@example.com", role=self.role)
         self.user.set_password("Admin@12345")
         self.user.save()
+
+        self.staff_user = User.objects.create(name="Cashier", email="cashier@example.com", role=self.staff_role)
+        self.staff_user.set_password("Cashier@12345")
+        self.staff_user.save()
 
     def test_login_and_access_check(self):
         response = self.client.post(
@@ -84,3 +89,63 @@ class AuthFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["message"], "User not found")
+
+    def test_admin_can_change_own_password_from_forgot_password_api(self):
+        response = self.client.post(
+            "/api/auth/forgot-password/",
+            data=json.dumps(
+                {
+                    "email": "admin@example.com",
+                    "new_password": "NewAdmin@12345",
+                    "confirm_password": "NewAdmin@12345",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"], "Password changed successfully")
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewAdmin@12345"))
+
+    def test_non_admin_cannot_change_password_from_forgot_password_api(self):
+        response = self.client.post(
+            "/api/auth/forgot-password/",
+            data=json.dumps(
+                {
+                    "email": "cashier@example.com",
+                    "new_password": "NewCashier@12345",
+                    "confirm_password": "NewCashier@12345",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["message"], "Only admin can change forgotten password")
+
+        self.staff_user.refresh_from_db()
+        self.assertTrue(self.staff_user.check_password("Cashier@12345"))
+
+    def test_admin_check_api_returns_success_for_admin_email(self):
+        response = self.client.post(
+            "/api/auth/forgot-password/check-admin/",
+            data=json.dumps({"email": "admin@example.com"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["data"]["is_admin"])
+        self.assertEqual(response.json()["message"], "Admin user found")
+
+    def test_admin_check_api_returns_403_for_non_admin_email(self):
+        response = self.client.post(
+            "/api/auth/forgot-password/check-admin/",
+            data=json.dumps({"email": "cashier@example.com"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.json()["data"]["is_admin"])
+        self.assertEqual(response.json()["message"], "User is not an admin")

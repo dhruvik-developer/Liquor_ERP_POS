@@ -5,7 +5,9 @@ from .views import (
     AssignPermissionsToRoleViewSet,
     AssignRoleToUserViewSet,
     AssignStoresToUserViewSet,
+    ForgotPasswordAdminCheckViewSet,
     LoginViewSet,
+    ForgotPasswordViewSet,
     LogoutViewSet,
     PermissionViewSet,
     RoleDetailViewSet,
@@ -20,6 +22,8 @@ from .views import (
 urlpatterns = [
     path("auth/login/", LoginViewSet.as_view(), name="login"),
     path("auth/refresh/", TokenRefreshViewSet.as_view(), name="token-refresh"),
+    path("auth/forgot-password/check-admin/", ForgotPasswordAdminCheckViewSet.as_view(), name="forgot-password-check-admin"),
+    path("auth/forgot-password/", ForgotPasswordViewSet.as_view(), name="forgot-password"),
     path("auth/logout/", LogoutViewSet.as_view(), name="logout"),
     path("auth/access-check/", AccessCheckViewSet.as_view(), name="access-check"),
     path("users/", UserViewSet.as_view(), name="users"),
