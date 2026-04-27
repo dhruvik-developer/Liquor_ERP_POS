@@ -22,4 +22,4 @@ python manage.py migrate --noinput
 
 # Start Gunicorn
 echo "Starting Gunicorn..."
-exec gunicorn trayza.wsgi:application --bind "$GUNICORN_BIND"
+exec gunicorn Liquor_ERP_POS.wsgi:application --bind "$GUNICORN_BIND"
